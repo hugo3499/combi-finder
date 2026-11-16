@@ -42,7 +42,7 @@ for (const d of days) {
     const r = findResult(rowsByLeague[e.sport_key] || [], e.home, e.away, e.kickoff);
     if (!r) continue;
     const cf = closingFair(r);
-    e.result = { hg: r.hg, ag: r.ag, closing: cf, src: r.div };
+    e.result = { hg: r.hg, ag: r.ag, closing: cf, src: r.div, close_src: r.close.src || null };
     const cfit = cf ? Model.fit(cf.pH, cf.pD, cf.pA, cf.pO) : null;
     for (const s of d.selections) {
       if (s.match_id !== e.id) continue;
@@ -60,7 +60,7 @@ log(`${settledEvents} matchs et ${settledSel} sélections réglés`);
 const matches = [];
 for (const [sk, rows] of Object.entries(rowsByLeague)) for (const r of rows) {
   if ((now - Date.parse(r.date)) > 45 * 864e5) continue;
-  matches.push({ sport_key: sk, date: r.date, home: r.home, away: r.away, hg: r.hg, ag: r.ag, closing: closingFair(r) });
+  matches.push({ sport_key: sk, date: r.date, home: r.home, away: r.away, hg: r.hg, ag: r.ag, closing: closingFair(r), close_src: r.close.src || null });
 }
 writeJson("data/results.json", { updated: now.toISOString(), matches });
 

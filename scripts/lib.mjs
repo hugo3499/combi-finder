@@ -67,6 +67,13 @@ export function parseUkDate(s) {   // dd/mm/yy ou dd/mm/yyyy → YYYY-MM-DD
   return `${yy}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 const num = v => { const x = parseFloat(v); return Number.isFinite(x) && x > 1 ? x : null; };
+/* cotes de clôture : Pinnacle, sinon moyenne du marché, sinon Bet365 (source notée) */
+function closeOf(r) {
+  for (const [src, h, d, a, o, u] of [["pinnacle", "PSCH", "PSCD", "PSCA", "PC>2.5", "PC<2.5"], ["moyenne", "AvgCH", "AvgCD", "AvgCA", "AvgC>2.5", "AvgC<2.5"], ["bet365", "B365CH", "B365CD", "B365CA", "B365C>2.5", "B365C<2.5"], ["pinnacle-ouverture", "PSH", "PSD", "PSA", "P>2.5", "P<2.5"], ["moyenne-ouverture", "AvgH", "AvgD", "AvgA", "Avg>2.5", "Avg<2.5"]]) {
+    if (num(r[h]) && num(r[d]) && num(r[a])) return { H: num(r[h]), D: num(r[d]), A: num(r[a]), O: num(r[o]), U: num(r[u]), src };
+  }
+  return {};
+}
 /* télécharge une saison d'une ligue : lignes normalisées */
 export async function ukSeason(div, season) {
   const url = `https://www.football-data.co.uk/mmz4281/${season}/${div}.csv`;
@@ -74,7 +81,7 @@ export async function ukSeason(div, season) {
   return parseCsv(text).map(r => ({
     div, date: parseUkDate(r.Date), home: r.HomeTeam, away: r.AwayTeam,
     hg: r.FTHG === "" ? null : +r.FTHG, ag: r.FTAG === "" ? null : +r.FTAG,
-    close: { H: num(r.PSCH) ?? num(r.PSH), D: num(r.PSCD) ?? num(r.PSD), A: num(r.PSCA) ?? num(r.PSA), O: num(r["PC>2.5"]) ?? num(r["P>2.5"]), U: num(r["PC<2.5"]) ?? num(r["P<2.5"]) },
+    close: closeOf(r),
   })).filter(r => r.hg != null && r.ag != null);
 }
 /* probabilités justes de clôture (Pinnacle) d'une ligne CSV, ou null */

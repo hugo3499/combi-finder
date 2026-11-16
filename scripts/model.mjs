@@ -53,13 +53,13 @@ for (const sk of LEAGUES) {
   /* backtest glissant : blocs de 28 jours sur la saison passée + l'actuelle */
   const start = Date.parse(rows.find(r => r.date >= `${2000 + +SEASONS[1].slice(0, 2)}-07-01`)?.date || rows[Math.floor(rows.length / 3)].date);
   const L = { n: 0, ll: Object.fromEntries(WEIGHTS.map(w => [w, 0])), llm: 0, ou: { n: 0, market: 0, model: 0 } };
-  const dbg = { test: 0, noMarket: 0, noModel: 0, blocks: 0 };
+  const dbg = { test: 0, noMarket: 0, noModel: 0, blocks: 0, src: {} };
   for (let t = start; t < now; t += 28 * 864e5) {
     const train = rows.filter(r => Date.parse(r.date) < t), test = rows.filter(r => Date.parse(r.date) >= t && Date.parse(r.date) < t + 28 * 864e5);
     if (train.length < 150 || !test.length) continue;
     const p = fit(train, t, 300); dbg.blocks++;
     for (const r of test) {
-      dbg.test++; const mk = closingFair(r), md = probs(p, r.home, r.away); if (!mk) dbg.noMarket++; if (!md) dbg.noModel++; if (!mk || !md) continue;
+      dbg.test++; const mk = closingFair(r), md = probs(p, r.home, r.away); if (!mk) dbg.noMarket++; if (!md) dbg.noModel++; if (!mk || !md) continue; dbg.src[r.close.src] = (dbg.src[r.close.src] || 0) + 1;
       const res = r.hg > r.ag ? "pH" : r.hg < r.ag ? "pA" : "pD";
       for (const w of WEIGHTS) { const pr = (1 - w) * mk[res] + w * md[res]; L.ll[w] -= Math.log(clamp(pr)); }
       L.llm -= Math.log(clamp(md[res])); L.n++;
@@ -68,7 +68,7 @@ for (const sk of LEAGUES) {
   }
   for (const w of WEIGHTS) acc.ll[w] += L.ll[w]; acc.llm += L.llm; acc.n += L.n; acc.ou.n += L.ou.n; acc.ou.market += L.ou.market; acc.ou.model += L.ou.model;
   out.backtest.by_league[sk] = { n: L.n, market: L.n ? +(L.ll[0] / L.n).toFixed(5) : null, model: L.n ? +(L.llm / L.n).toFixed(5) : null, best: L.n ? WEIGHTS.reduce((b, w) => L.ll[w] < L.ll[b] ? w : b, 0) : null };
-  log(`${div} debug : ${JSON.stringify(dbg)} ; 1re ligne test ${JSON.stringify(rows.find(r => r.date >= `${2000 + +SEASONS[1].slice(0, 2)}-07-01`))}`);
+  log(`${div} debug : ${JSON.stringify(dbg)}`);
   log(`${div} backtest : ${L.n} matchs, log-loss marché ${(L.ll[0] / L.n).toFixed(4)}, modèle ${(L.llm / L.n).toFixed(4)}, meilleur mélange w=${out.backtest.by_league[sk].best}`);
 
   /* modèle final sur toutes les données */
