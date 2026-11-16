@@ -134,7 +134,13 @@ async function loadFile(name){
   return store.get("f_"+name,null);
 }
 async function loadData(){
-  [standings,modelData,resultsData,paperData]=await Promise.all(["standings","model","results","paper"].map(loadFile));
+  let latest;
+  [standings,modelData,resultsData,paperData,latest]=await Promise.all(["standings","model","results","paper","latest"].map(loadFile));
+  if(latest&&latest.fetched_at&&(!cache||Date.parse(latest.fetched_at)>Date.parse(cache.fetched_at||0))){
+    cache={fetched_at:latest.fetched_at,demo:false,events:latest.events,extras:{},logs:[`[robot] relevé automatique : ${latest.events.length} matchs à venir`],remaining:latest.remaining,robot:true,
+      params:{championnats:latest.leagues,marches:{"1N2":true,plus_moins_2_5:true,les_deux_marquent:false,extras:false},mes_bookmakers:latest.books}};
+    saveCache();
+  }
   if(standings&&!standings.updated)standings=null;
   if(resultsData&&!resultsData.updated)resultsData=null;
   if(paperData&&!paperData.updated)paperData=null;
@@ -272,12 +278,13 @@ function show(c){
   const box=$('tickets'),note=$('note');
   if(!c){last=null;box.innerHTML=`<div class="empty">Aucune cote enregistrée pour l’instant.<br>Colle ta clé API dans les réglages puis appuie sur <b>Actualiser les cotes</b>, ou essaie la <b>Démo</b>.</div>`;$('status').textContent='';note.innerHTML='';$('logsBox').hidden=true;return;}
   const res=compute(c);last=res;
-  $('status').innerHTML=res.demo?'Démo : matchs inventés, ne les joue pas.':`<span class="fresh">Cotes récupérées ${ago(res.fetched_at)}</span> · ${res.matches} matchs · ${res.tickets.length} tickets${res.weight?` · modèle ${Math.round(res.weight*100)} %`:''}`;
+  $('status').innerHTML=res.demo?'Démo : matchs inventés, ne les joue pas.':`<span class="fresh">Cotes ${c.robot?'du robot, relevées':'récupérées'} ${ago(res.fetched_at)}</span> · ${res.matches} matchs · ${res.tickets.length} tickets${res.weight?` · modèle ${Math.round(res.weight*100)} %`:''}`;
   setQuota(res.remaining);
   const warn=[];
   if(res.missing.length)warn.push(`Pas encore de cotes pour : ${res.missing.map(leagueName).join(', ')}.`);else if(res.needs_refresh)warn.push("Tu as ajouté un bookmaker ou un type de pari.");
   if(!res.demo&&res.fetched_at&&(Date.now()-new Date(res.fetched_at))>6*3600e3)warn.push("Les cotes ont plus de 6 h, elles ont pu bouger.");
-  if(res.noExtra&&c.params)warn.push("Aucune cote trouvée pour les marchés supplémentaires chez tes bookmakers : l’API ne les couvre peut-être pas encore pour eux.");
+  if(res.noExtra&&c.params&&!c.robot)warn.push("Aucune cote trouvée pour les marchés supplémentaires chez tes bookmakers : l’API ne les couvre peut-être pas encore pour eux.");
+  if(c.robot&&cfg.marches.extras)warn.push("Cotes relevées par le robot (sans marchés supplémentaires). Actualise à la main seulement si tu veux double chance, +1,5, etc.");
   note.innerHTML=warn.length?`<div class="note">${warn.join(' ')}${warn.some(w=>/Actualiser|ajouté|Pas encore|plus de 6/.test(w))?' Appuie sur <b>Actualiser les cotes</b> pour mettre à jour.':''}</div>`:'';
   $('logs').textContent=res.logs.join('\n');$('logsBox').hidden=!res.logs.length;
   if(!res.tickets.length){box.innerHTML=`<div class="empty">${res.matches?`Aucun ticket ne passe tes filtres sur ${res.matches} matchs.<br>Essaie un autre profil de risque ou baisse la chance mini par pari.`:`Aucun match à venir sur la période.<br>Augmente le nombre de jours (trêve internationale ?) ou actualise les cotes.`}</div>`;return;}

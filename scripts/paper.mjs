@@ -30,17 +30,20 @@ if (FD) {
 }
 
 /* 2. relevé des cotes */
-const events = []; let remaining = null;
+const events = [], allEvents = []; let remaining = null;
 for (const sp of LEAGUES) {
   try {
     const { data, remaining: r } = await oddsApi(`/sports/${sp}/odds/?bookmakers=${["pinnacle", ...BOOKS].join(",")}&markets=h2h,totals&oddsFormat=decimal`, KEY);
-    remaining = r;
+    remaining = r; allEvents.push(...data.filter(e => Date.parse(e.commence_time) > now));
     const inWin = data.filter(e => Date.parse(e.commence_time) > now && Date.parse(e.commence_time) <= until && !index.seen[e.id]);
     events.push(...inWin);
     log(`${sp} : ${data.length} matchs, ${inWin.length} nouveaux dans l'horizon (crédits restants ${r})`);
     await sleep(400);
   } catch (e) { log(`[!] ${sp} : ${e.message}`); if (/401/.test(e.message)) process.exit(1); }
 }
+/* cotes brutes pour l'appli : elle les charge toute seule, sans dépenser de crédits */
+writeJson("data/latest.json", { fetched_at: now.toISOString(), remaining, leagues: LEAGUES, books: BOOKS, events: allEvents });
+log(`data/latest.json : ${allEvents.length} matchs à venir`);
 if (!events.length) { log("Aucun nouveau match dans l'horizon."); process.exit(0); }
 
 /* 3. sélections (probas marché + mélange modèle) et tickets par profil */
