@@ -98,6 +98,7 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
 .cal{display:grid;grid-template-columns:70px minmax(0,1fr) 110px;gap:10px;align-items:center;font-size:13px;margin:6px 0}.bar{position:relative;height:12px;background:var(--line);border-radius:6px;overflow:visible}.bar i{display:block;height:100%;background:var(--good);border-radius:6px}.bar em{position:absolute;top:-4px;width:3px;height:20px;background:var(--ink);transform:translateX(-50%)}
 .manual{margin-bottom:16px}select{width:100%;font:16px Inter;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-height:44px}
 .b-won{border-color:var(--good)}.b-lost{opacity:.75}.r-win .lp{color:var(--good)}.r-lose .lp{color:#d33c2c;text-decoration:line-through}
+.tag-warn{background:var(--warn);color:#0b1a12}.spark{display:block;width:calc(100% - 32px);height:60px;margin:6px 16px 0}.spark line{stroke:var(--line);stroke-width:1}.spark polyline{fill:none;stroke:var(--good);stroke-width:2}
 .backup{margin-top:18px}.file{display:inline-flex;align-items:center;cursor:pointer}
 @media (prefers-reduced-motion:no-preference){.t{animation:in .35s ease both}@keyframes in{from{opacity:0;transform:translateY(8px)}}}
 </style>
@@ -106,7 +107,7 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
 <header>
   <h1>Combi<span>Finder</span></h1>
   <div class="quota" id="quota">Crédits restants : <b>—</b></div>
-  <nav class="tabs"><button class="tab" data-t="tickets" aria-pressed="true">Tickets</button><button class="tab" data-t="bets" aria-pressed="false">Carnet</button></nav>
+  <nav class="tabs"><button class="tab" data-t="tickets" aria-pressed="true">Tickets</button><button class="tab" data-t="bets" aria-pressed="false">Carnet</button><button class="tab" data-t="test" aria-pressed="false">Test</button></nav>
 </header>
 
 <main>
@@ -164,6 +165,9 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
     <div class="f"><label class="lab" for="top">Nombre de tickets affichés</label>
       <input id="top" type="number" min="1" max="50"></div>
 
+    <div class="f"><label for="wMod">Poids du modèle maison : <b id="wModV"></b></label>
+      <input id="wMod" type="range" min="0" max="30" step="5">
+      <p class="hint" id="modInfo"></p><button class="chip" id="wModAuto" type="button">Revenir au poids auto</button></div>
     <p class="hint" id="cost"></p>
     <p class="hint" id="standInfo"></p>
   </details>
@@ -181,9 +185,11 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
     </div>
     <details class="logs" id="logsBox" hidden><summary>Détail de la recherche</summary><pre id="logs"></pre></details>
   </section>
+  <section id="viewTest" hidden><div id="test"></div></section>
   <section id="viewBets" hidden>
-    <div class="go"><button class="btn main" id="settle">Mettre à jour les résultats</button></div>
+    <div class="go"><button class="btn main" id="settle">Mettre à jour les résultats</button><button class="btn alt" id="settleApi">Forcer via l’API</button></div>
     <p class="status" id="bStatus"></p>
+    <p class="hint" id="clvHelp"></p>
     <div class="stats" id="stats"></div>
     <div class="panel" id="calib"></div>
     <details class="panel manual"><summary>Ajouter un pari joué ailleurs</summary>
@@ -200,6 +206,7 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
 <p class="foot">Tes réglages et les dernières cotes restent enregistrés dans ton téléphone. Les chances affichées viennent des cotes de Pinnacle, sans marge. Une chance de 50 % veut dire que le ticket perd une fois sur deux. Joue seulement ce que tu peux perdre — Joueurs Info Service : 09 74 75 13 13.</p>
 
 <script src="./model.js"></script>
+<script src="./engine.js"></script>
 <script src="./demo.js"></script>
 <script src="./app.js"></script>
 </body>

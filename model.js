@@ -83,6 +83,6 @@ const Model = (() => {
     if (sel.mkey === 'spreads' && Number.isInteger(sel.point) && (sel.side === 'H' ? h + sel.point === a : a + sel.point === h)) return 'push';
     return pushPred(sel)(h, a) ? 'win' : 'lose';
   }
-  return { fit, prob, joint, settle, sum };
+  return { fit, prob, joint, settle, sum, matrixFor: matrix, MAXG };
 })();
 if (typeof module !== 'undefined') module.exports = Model;

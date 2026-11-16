@@ -1,0 +1,25 @@
+name: Test papier (relevé quotidien)
+on:
+  schedule:
+    - cron: "25 7 * * *"   # tous les jours à 07:25 UTC (8h25 / 9h25 à Paris)
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: data, cancel-in-progress: false }
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Relevé des cotes et tickets papier
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
+        run: node scripts/paper.mjs
+      - name: Enregistrer
+        run: |
+          git config user.name "combi-bot" && git config user.email "combi-bot@users.noreply.github.com"
+          git add data && (git diff --cached --quiet || git commit -m "Test papier $(date -u +%Y-%m-%d)")
+          git pull --rebase && git push

@@ -31,3 +31,4 @@ const Demo = (() => {
   };
   return { events, extras };
 })();
+if (typeof module !== 'undefined') module.exports = Demo;
