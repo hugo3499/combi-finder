@@ -3,6 +3,8 @@ on:
   schedule:
     - cron: "25 7 * * *"   # tous les jours à 07:25 UTC (8h25 / 9h25 à Paris)
   workflow_dispatch:
+  push:
+    paths: ["scripts/paper.mjs"]
 permissions:
   contents: write
 concurrency: { group: data, cancel-in-progress: false }

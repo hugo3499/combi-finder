@@ -136,8 +136,9 @@ async function loadFile(name){
 async function loadData(){
   let latest;
   [standings,modelData,resultsData,paperData,latest]=await Promise.all(["standings","model","results","paper","latest"].map(loadFile));
-  if(latest&&latest.fetched_at&&(!cache||Date.parse(latest.fetched_at)>Date.parse(cache.fetched_at||0))){
-    cache={fetched_at:latest.fetched_at,demo:false,events:latest.events,extras:{},logs:[`[robot] relevé automatique : ${latest.events.length} matchs à venir`],remaining:latest.remaining,robot:true,
+  const lev=latest?(latest.events||Object.values(latest.by_league||{}).flatMap(b=>b.events||[])):[];
+  if(latest&&latest.fetched_at&&lev.length&&(!cache||cache.robot||Date.parse(latest.fetched_at)>Date.parse(cache.fetched_at||0))){
+    cache={fetched_at:latest.fetched_at,demo:false,events:lev,extras:{},logs:[`[robot] relevé automatique : ${lev.length} matchs à venir`,...Object.entries(latest.by_league||{}).map(([k,b])=>`  ${leagueName(k)} : ${(b.events||[]).length} matchs, relevé ${ago(b.fetched_at)}`)],remaining:latest.remaining,robot:true,
       params:{championnats:latest.leagues,marches:{"1N2":true,plus_moins_2_5:true,les_deux_marquent:false,extras:false},mes_bookmakers:latest.books}};
     saveCache();
   }
