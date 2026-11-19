@@ -239,7 +239,7 @@ function importBets(file){const rd=new FileReader();rd.onload=()=>{try{const d=J
 const chips=(el,list,isOn,toggle)=>{el.innerHTML=list.map(([k,l])=>`<button class="chip" data-k="${k}" aria-pressed="${isOn(k)}">${l}</button>`).join('');el.onclick=e=>{const b=e.target.closest('.chip');if(!b)return;toggle(b.dataset.k);b.setAttribute('aria-pressed',isOn(b.dataset.k));changed();};};
 const seg=(el,get,set)=>{const paint=()=>el.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v)===String(get())));el.onclick=e=>{const b=e.target.closest('button');if(!b)return;set(b.dataset.v);paint();changed();};paint();return paint;};
 const toggleIn=(arr,k)=>arr.includes(k)?arr.filter(x=>x!==k):[...arr,k];
-const currentPreset=()=>Object.keys(PRESETS).find(p=>PKEYS.every(k=>Math.abs(PRESETS[p][k]-cfg[k])<1e-9))||'';
+const currentPreset=()=>Object.keys(PRESETS).find(p=>Engine.samePreset(cfg,PRESETS[p]))||'';
 function cost(){const nm=(cfg.marches["1N2"]?1:0)+(cfg.marches.plus_moins_2_5?1:0)||1;return cfg.championnats.length*nm+(cfg.marches.extras?cfg.preselection*4:0);}
 function labels(){
   const n=cost();$('runCost').textContent=`(≈ ${n} crédits${cfg.marches.les_deux_marquent?' + 1/match':''})`;

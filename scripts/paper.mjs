@@ -10,7 +10,7 @@ const FD = process.env.FOOTBALL_DATA_KEY || "";
 const HORIZON_H = +(process.env.PAPER_HORIZON_H || 48);
 const BOOKS = (process.env.PAPER_BOOKS || "betclic_fr").split(",");
 const LEAGUES = (process.env.PAPER_LEAGUES || Engine.LEAGUES.map(l => l[0]).join(",")).split(",");
-const BANKROLL = 100, STAKE_PCT = 0.02, TOP = 5;
+const BANKROLL = 100, TOP = 5;   // mise : celle de chaque profil (Engine.PRESETS)
 
 const now = new Date(), until = new Date(now.getTime() + HORIZON_H * 3600e3);
 const today = now.toISOString().slice(0, 10);
@@ -69,7 +69,7 @@ log(`data/latest.json : ${allEvents.length} matchs à venir pour l'appli`);
 if (!events.length) { log(`Pas de nouveau match dans les ${HORIZON_H} h : pas de tickets papier aujourd'hui.`); process.exit(0); }
 
 /* 3. sélections (probas marché + mélange modèle) et tickets par profil */
-const baseCfg = { ...Engine.DEFAULTS, mes_bookmakers: BOOKS, marches: { "1N2": true, plus_moins_2_5: true, les_deux_marquent: false, extras: false }, classement: "mixte", paris_lies: true, nombre_de_combis_affiches: TOP, bankroll: BANKROLL, mise_fixe_pct: STAKE_PCT };
+const baseCfg = { ...Engine.DEFAULTS, mes_bookmakers: BOOKS, marches: { "1N2": true, plus_moins_2_5: true, les_deux_marquent: false, extras: false }, nombre_de_combis_affiches: TOP, bankroll: BANKROLL };
 const market = Engine.analyse(events, baseCfg, {});                       // marché seul
 const blend = weight ? Engine.analyse(events, baseCfg, { model, weight }) : market;
 const pm = Object.fromEntries(market.selections.map(s => [s.id, s.prob]));

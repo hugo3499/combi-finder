@@ -9,18 +9,26 @@
 const BOOKS=[["betclic_fr","Betclic"],["winamax_fr","Winamax"],["unibet_fr","Unibet"],["parionssport_fr","Parions Sport"],["pmu_fr","PMU"],["netbet_fr","NetBet"]];
 /* [clé Odds API, nom, code football-data.org, code football-data.co.uk] */
 const LEAGUES=[["soccer_france_ligue_one","Ligue 1","FL1","F1"],["soccer_france_ligue_two","Ligue 2",null,"F2"],["soccer_epl","Premier League","PL","E0"],["soccer_spain_la_liga","Liga","PD","SP1"],["soccer_italy_serie_a","Serie A","SA","I1"],["soccer_germany_bundesliga","Bundesliga","BL1","D1"],["soccer_uefa_champs_league","Ligue des champions","CL",null],["soccer_uefa_europa_league","Ligue Europa",null,null],["soccer_portugal_primeira_liga","Portugal","PPL","P1"],["soccer_netherlands_eredivisie","Eredivisie","DED","N1"]];
+/* Profils réglés « en pro » : pour une même cote, moins de paris = moins de marge
+   payée ; plus le ticket est risqué, plus la mise est petite. Tout est appliqué d'un
+   coup (téléphone ET robot du test papier). */
 const PRESETS={
-  prudent:{cote_totale_min:1.5,cote_totale_max:3,proba_min_par_selection:0.65,matchs_min_par_combi:2,matchs_max_par_combi:3,label:"Cote 1,5 à 3 · chaque pari ≥ 65 % · 2 à 3 paris"},
-  equilibre:{cote_totale_min:2,cote_totale_max:5,proba_min_par_selection:0.5,matchs_min_par_combi:2,matchs_max_par_combi:4,label:"Cote 2 à 5 · chaque pari ≥ 50 % · 2 à 4 paris"},
-  risque:{cote_totale_min:5,cote_totale_max:15,proba_min_par_selection:0.35,matchs_min_par_combi:3,matchs_max_par_combi:4,label:"Cote 5 à 15 · chaque pari ≥ 35 % · 3 à 4 paris"},
-  gros:{cote_totale_min:15,cote_totale_max:80,proba_min_par_selection:0.2,matchs_min_par_combi:4,matchs_max_par_combi:4,label:"Cote 15 à 80 · chaque pari ≥ 20 % · 4 paris"}
+  prudent:{cote_totale_min:1.6,cote_totale_max:2.4,matchs_min_par_combi:2,matchs_max_par_combi:2,proba_min_par_selection:0.6,classement:"mixte",paris_lies:true,valeur_mini:false,mise_fixe_pct:0.02,
+    label:"Cote 1,6 à 2,4 · 2 paris · chaque pari ≥ 60 % · classés en mixte · mise 2 %"},
+  equilibre:{cote_totale_min:2.2,cote_totale_max:4,matchs_min_par_combi:2,matchs_max_par_combi:3,proba_min_par_selection:0.42,classement:"valeur",paris_lies:true,valeur_mini:false,mise_fixe_pct:0.015,
+    label:"Cote 2,2 à 4 · 2 à 3 paris · chaque pari ≥ 42 % · classés par valeur · mise 1,5 %"},
+  risque:{cote_totale_min:4,cote_totale_max:10,matchs_min_par_combi:2,matchs_max_par_combi:3,proba_min_par_selection:0.28,classement:"valeur",paris_lies:true,valeur_mini:false,mise_fixe_pct:0.01,
+    label:"Cote 4 à 10 · 2 à 3 paris · chaque pari ≥ 28 % · classés par valeur · mise 1 %"},
+  gros:{cote_totale_min:10,cote_totale_max:40,matchs_min_par_combi:3,matchs_max_par_combi:4,proba_min_par_selection:0.2,classement:"valeur",paris_lies:true,valeur_mini:false,mise_fixe_pct:0.005,
+    label:"Cote 10 à 40 · 3 à 4 paris · chaque pari ≥ 20 % · classés par valeur · mise 0,5 %"}
 };
-const PKEYS=["cote_totale_min","cote_totale_max","proba_min_par_selection","matchs_min_par_combi","matchs_max_par_combi"];
-const DEFAULTS={cle_api:"",classement:"mixte",valeur_mini:false,paris_lies:true,preselection:10,
+const PKEYS=["cote_totale_min","cote_totale_max","matchs_min_par_combi","matchs_max_par_combi","proba_min_par_selection","classement","paris_lies","valeur_mini","mise_fixe_pct"];
+const samePreset=(cfg,p)=>PKEYS.every(k=>typeof p[k]==="number"?Math.abs(p[k]-cfg[k])<1e-9:p[k]===cfg[k]);
+const DEFAULTS={cle_api:"",preselection:10,
   championnats:["soccer_france_ligue_one","soccer_epl","soccer_spain_la_liga","soccer_italy_serie_a","soccer_germany_bundesliga","soccer_uefa_champs_league"],
   mes_bookmakers:["betclic_fr"],marches:{"1N2":true,plus_moins_2_5:true,les_deux_marquent:false,extras:true},jours_a_venir:7,
-  matchs_min_par_combi:2,matchs_max_par_combi:4,cote_totale_min:2,cote_totale_max:5,proba_min_par_selection:0.5,
-  bankroll:100,mise_fixe_pct:0.02,nombre_de_combis_affiches:10,poids_modele:null};
+  bankroll:100,nombre_de_combis_affiches:10,poids_modele:null};
+for(const k of PKEYS)DEFAULTS[k]=PRESETS.equilibre[k];
 const SHARP=["pinnacle","betfair_ex_eu","matchbook"];
 
 const prod=a=>a.reduce((x,y)=>x*y,1);
@@ -186,5 +194,5 @@ function analyse(events,cfg,opts={}){
   return {fitById,selections:sel,tickets:buildTickets(sel,fitById,cfg)};
 }
 
-return {BOOKS,LEAGUES,PRESETS,PKEYS,DEFAULTS,SHARP,prod,norm,devig,canon,sim,findTeam,marketBooks,fairFromSharp,modelProbs,fitEvent,selectionsFor,buildTickets,ticketProb,scoreOf,analyse};
+return {BOOKS,LEAGUES,PRESETS,PKEYS,samePreset,DEFAULTS,SHARP,prod,norm,devig,canon,sim,findTeam,marketBooks,fairFromSharp,modelProbs,fitEvent,selectionsFor,buildTickets,ticketProb,scoreOf,analyse};
 });

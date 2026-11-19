@@ -117,6 +117,12 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
     <div class="f"><label for="key">Clé API (the-odds-api.com)</label>
       <input id="key" type="password" autocomplete="off" placeholder="Colle ta clé ici"><p class="hint">Gardée uniquement dans ton téléphone.</p></div>
 
+    <div class="f"><span class="lab">Profil de risque</span>
+      <div class="seg" id="preset">
+        <button data-v="prudent">Prudent</button><button data-v="equilibre">Équilibré</button><button data-v="risque">Risqué</button><button data-v="gros">Gros coup</button>
+      </div>
+      <p class="hint" id="presetHint"></p><p class="hint">Un profil règle d’un coup la cote, le nombre de paris, la chance mini, le classement et la mise. Le robot du test papier utilise exactement les mêmes.</p></div>
+
     <div class="f"><span class="lab">Classer les tickets par</span>
       <div class="seg" id="classement"><button data-v="chances">Chances</button><button data-v="mixte">Mixte</button><button data-v="valeur">Valeur</button></div>
       <p class="hint">Chances = ceux qui passent le plus. Valeur = ceux où la cote paie le mieux par rapport au risque. Mixte = le compromis.</p></div>
@@ -124,12 +130,6 @@ input[type=range]{width:100%;accent-color:var(--good);height:32px}
       <div><span class="lab">Paris liés (même match)</span><div class="seg" id="lies"><button data-v="1">Oui</button><button data-v="0">Non</button></div></div>
       <div><span class="lab">Valeur ≥ 0 par pari</span><div class="seg" id="valmin"><button data-v="1">Exiger</button><button data-v="0">Non</button></div></div>
     </div></div>
-
-    <div class="f"><span class="lab">Profil de risque</span>
-      <div class="seg" id="preset">
-        <button data-v="prudent">Prudent</button><button data-v="equilibre">Équilibré</button><button data-v="risque">Risqué</button><button data-v="gros">Gros coup</button>
-      </div>
-      <p class="hint" id="presetHint"></p></div>
 
     <div class="f"><span class="lab">Mes bookmakers</span><div class="chips" id="books"></div></div>
     <div class="f"><span class="lab">Championnats</span><div class="chips" id="leagues"></div></div>
