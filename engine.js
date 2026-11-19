@@ -148,13 +148,27 @@ function ticketProb(legs,fitById){
   return {prob:p,linked,indep};
 }
 function buildTickets(sel,fitById,cfg){
-  let pool=sel.filter(s=>s.prob>=cfg.proba_min_par_selection&&(!cfg.valeur_mini||s.edge>=0));
+  const cand=sel.filter(s=>s.prob>=cfg.proba_min_par_selection&&(!cfg.valeur_mini||s.edge>=0));
   const sc=s=>scoreOf(cfg,s.price,s.prob);
-  const byM={};for(const s of pool.sort((a,b)=>sc(b)-sc(a)))(byM[s.match_id]=byM[s.match_id]||[]).push(s);
-  pool=Object.values(byM).flatMap(ls=>ls.slice(0,cfg.paris_lies?3:1)).sort((a,b)=>sc(b)-sc(a)).slice(0,42);
+  /* Présélection adaptée à la cote visée : pour n paris, la cote « typique » d'un pari
+     est (cote cible)^(1/n). On garde, pour chaque n, les meilleurs paris proches de
+     cette cote, puis on réunit le tout. Sans ça, avec beaucoup de matchs, il ne reste
+     que des gros favoris et les profils à grosse cote ne trouvent plus rien. */
+  const target=Math.sqrt(cfg.cote_totale_min*cfg.cote_totale_max);
+  const perMatch=cfg.paris_lies?3:1,picked=new Map();
+  for(let n=cfg.matchs_min_par_combi;n<=cfg.matchs_max_par_combi;n++){
+    const t=target**(1/n);
+    const ranked=[...cand].sort((a,b)=>sc(b)*Math.exp(-1.5*Math.abs(Math.log(b.price/t)))-sc(a)*Math.exp(-1.5*Math.abs(Math.log(a.price/t))));
+    const cnt={};let k=0;
+    for(const s of ranked){if(k>=Math.ceil(42/(cfg.matchs_max_par_combi-cfg.matchs_min_par_combi+1))+6)break;if((cnt[s.match_id]||0)>=perMatch)continue;cnt[s.match_id]=(cnt[s.match_id]||0)+1;picked.set(s.id,s);k++;}
+  }
+  /* + l'ancienne présélection telle quelle (les 42 meilleurs paris), pour ne rien perdre */
+  const byM={};for(const s of [...cand].sort((a,b)=>sc(b)-sc(a)))(byM[s.match_id]=byM[s.match_id]||[]).push(s);
+  for(const s of Object.values(byM).flatMap(ls=>ls.slice(0,perMatch)).sort((a,b)=>sc(b)-sc(a)).slice(0,42))picked.set(s.id,s);
+  const pool=[...picked.values()].sort((a,b)=>sc(b)-sc(a)).slice(0,64);
   const out=[];let count=0;
   for(let n=cfg.matchs_min_par_combi;n<=cfg.matchs_max_par_combi;n++)for(const legs of combinations(pool,n)){
-    if(++count>250000)break;
+    if(++count>700000)break;
     const nM=new Set(legs.map(l=>l.match_id)).size;
     if(!cfg.paris_lies&&nM<n)continue;
     if(n-nM>1)continue;
