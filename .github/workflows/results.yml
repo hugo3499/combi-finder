@@ -18,6 +18,7 @@ jobs:
       - name: Règlement des paris papier, CLV, résultats pour le carnet
         env:
           FOOTBALL_DATA_KEY: ${{ secrets.FOOTBALL_DATA_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: node scripts/results.mjs
       - name: Enregistrer
         run: |

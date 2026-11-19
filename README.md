@@ -14,7 +14,7 @@ Secrets : *Settings → Secrets and variables → Actions → New repository sec
 | Robot | Quand | Fait quoi | Crédits Odds API |
 |---|---|---|---|
 | Classements | chaque matin | `data/standings.json` (enjeu des matchs) | 0 |
-| Test papier | chaque jour de match, 9 h | relève les cotes, enregistre 5 tickets × 4 profils + toutes les sélections | 12 par jour de match |
+| Test papier | chaque jour, 8 h 25 | calendrier gratuit, puis relève les 10 championnats qui jouent bientôt (matchs à 48 h : chaque jour ; à 6 jours : tous les 3 jours) ; 5 tickets × 4 profils | ≈ 2 par championnat relevé |
 | Résultats | chaque nuit | règle les paris papier, cotes de clôture Pinnacle (CLV), `data/results.json` pour le carnet | 0 |
 | Modèle maison | chaque lundi | Dixon-Coles sur 3 saisons + backtest contre Pinnacle → `data/model.json` | 0 |
 

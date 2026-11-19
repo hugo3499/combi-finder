@@ -2,7 +2,7 @@
 // (CLV) avec les cotes de clôture Pinnacle de football-data.co.uk, publie
 // data/results.json (pour le carnet du téléphone) et data/paper.json (stats).
 // Clé facultative : FOOTBALL_DATA_KEY (résultats de la Ligue des champions).
-import { Engine, Model, ukSeason, closingFair, seasonCode, findResult, fdOrg, readJson, writeJson, listDir, log, sleep, UK_DIV, FD_CODE, dayOf } from "./lib.mjs";
+import { Engine, Model, ukSeason, closingFair, seasonCode, findResult, fdOrg, oddsApi, readJson, writeJson, listDir, log, sleep, UK_DIV, FD_CODE, dayOf } from "./lib.mjs";
 
 const FD = process.env.FOOTBALL_DATA_KEY || "";
 const now = new Date();
@@ -31,6 +31,19 @@ for (const sk of need) {
       log(`football-data.org ${FD_CODE[sk]} : ${rowsByLeague[sk].length} matchs terminés`); await sleep(6500);
     } catch (e) { log(`[!] football-data.org ${sk} : ${e.message}`); rowsByLeague[sk] = []; }
   } else rowsByLeague[sk] = [];
+}
+/* championnats sans source gratuite (ex. Ligue Europa) : scores via The Odds API,
+   seulement s'il reste des paris papier en attente (2 crédits par championnat) */
+const ODDS_KEY = process.env.ODDS_API_KEY || "";
+for (const sk of need) {
+  if ((rowsByLeague[sk] || []).length || !ODDS_KEY) continue;
+  const pending = days.some(d => d.events.some(e => e.sport_key === sk && !e.result && Date.parse(e.kickoff) < now - 2 * 3600e3));
+  if (!pending) continue;
+  try {
+    const { data, remaining } = await oddsApi(`/sports/${sk}/scores/?daysFrom=3`, ODDS_KEY);
+    rowsByLeague[sk] = (data || []).filter(g => g.completed && g.scores).map(g => { const sc = Object.fromEntries(g.scores.map(s => [s.name, +s.score])); return { div: "odds-api", date: dayOf(g.commence_time), home: g.home_team, away: g.away_team, hg: sc[g.home_team], ag: sc[g.away_team], close: {} }; }).filter(x => x.hg != null && x.ag != null);
+    log(`scores ${sk} via The Odds API : ${rowsByLeague[sk].length} matchs (crédits restants ${remaining})`);
+  } catch (e) { log(`[!] scores ${sk} : ${e.message}`); }
 }
 
 /* ---------- 2. règlement des journées papier ---------- */
