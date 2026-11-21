@@ -169,17 +169,18 @@ function settleOne(b){
 }
 function settleFromResults(){
   if(!resultsData)return 0;let n=0;
-  for(const b of bets){if(b.manual||b.status!=="pending"||b.demo)continue;
-    for(const l of b.legs){if(l.result)continue;
+  let clv=0;
+  for(const b of bets){if(b.manual||b.demo||(b.status!=="pending"&&b.legs.every(l=>!l.result||l.clv!=null)))continue;
+    for(const l of b.legs){if(l.result&&l.clv!=null)continue;
       const d=l.kickoff.slice(0,10);
       const cands=resultsData.matches.filter(m=>m.sport_key===l.sport_key&&Math.abs(Date.parse(m.date)-Date.parse(d))<=1.01*864e5);
       let best=null,bs=0;for(const m of cands){const sc=Engine.sim(l.home,m.home)+Engine.sim(l.away,m.away);if(sc>bs){bs=sc;best=m;}}
       if(!best||bs<1.2)continue;
-      l.score=`${best.hg}-${best.ag}`;l.result=Model.settle(l,best.hg,best.ag);n++;
-      if(best.closing){const cf=Model.fit(best.closing.pH,best.closing.pD,best.closing.pA,best.closing.pO);l.prob_close=Model.prob(cf,l);l.clv=l.price*l.prob_close-1;}
+      if(!l.result){l.score=`${best.hg}-${best.ag}`;l.result=Model.settle(l,best.hg,best.ag);n++;}
+      if(best.closing&&l.clv==null){const cf=Model.fit(best.closing.pH,best.closing.pD,best.closing.pA,best.closing.pO);l.prob_close=Model.prob(cf,l);l.clv=l.price*l.prob_close-1;clv++;}
     }
-    settleOne(b);}
-  if(n)saveBets();return n;
+    if(b.status==="pending")settleOne(b);}
+  if(n||clv)saveBets();return n;
 }
 async function settleBets(useApi){
   const pend=bets.filter(b=>!b.manual&&b.status==="pending"&&!b.demo);

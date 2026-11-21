@@ -50,22 +50,29 @@ globalThis.fetch = async (url) => {
     const [, season, div] = u.match(/mmz4281\/(\d{4})\/(\w+)\.csv/); const y = 2000 + +season.slice(0, 2);
     const until = phase === "results" ? new Date(NOW.getTime() + 3 * 864e5) : NOW;   // après règlement : les matchs du week-end sont joués
     const text = csvFor(div, y, until);
+    if (phase === "results" && process.env.SIM_SLOW_CSV) return ok(text);
     if (phase === "results") {   // ajoute les résultats des matchs papier avec clôture
       const extra = fixtures.filter(f => f._div === div).map(f => { const lh = Math.exp(0.25 + strength[f._h].att - strength[f._a].def), la = Math.exp(strength[f._a].att - strength[f._h].def); const hg = pois(lh), ag = pois(la); const pin = f.bookmakers[0].markets; return `${div},${fmt(new Date(f.commence_time))},20:00,${f._h},${f._a},${hg},${ag},${hg > ag ? "H" : hg < ag ? "A" : "D"},${pin[0].outcomes[0].price},${pin[0].outcomes[1].price},${pin[0].outcomes[2].price},${pin[1].outcomes[0].price},${pin[1].outcomes[1].price}`; });
       return ok(text + "\n" + extra.join("\n"));
     }
     return ok(text);
   }
+  if (u.includes("api.the-odds-api.com") && u.includes("/events?")) { const sk = u.match(/sports\/([^/]+)\/events/)?.[1]; return ok(fixtures.filter(f => f.sport_key === sk).map(f => ({ id: f.id, commence_time: f.commence_time }))); }
   if (u.includes("api.the-odds-api.com")) { const sk = u.match(/sports\/([^/]+)\/odds/)?.[1]; return ok(fixtures.filter(f => f.sport_key === sk)); }
-  if (u.includes("api.football-data.org")) return ok({ matches: fixtures.map(f => ({ utcDate: f.commence_time, status: "SCHEDULED" })) });
+  if (u.includes("api.football-data.org")) {
+    if (phase === "results" && u.includes("FINISHED")) { const code = u.match(/competitions\/(\w+)\//)[1]; const div = { FL1: "F1", PL: "E0" }[code];
+      return ok({ matches: fixtures.filter(f => f._div === div).map(f => ({ utcDate: f.commence_time, homeTeam: { name: f._h + " FC" }, awayTeam: { name: f._a }, score: { fullTime: { home: 1, away: 0 } } })) }); }
+    return ok({ matches: [] }); }
   throw new Error("URL inattendue " + u);
 };
 const realDate = Date; globalThis.Date = class extends realDate { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW.getTime(); } };
 process.env.ODDS_API_KEY = "x"; process.env.FOOTBALL_DATA_KEY = "y"; process.env.PAPER_LEAGUES = "soccer_france_ligue_one,soccer_epl"; process.env.MODEL_LEAGUES = "soccer_france_ligue_one,soccer_epl";
-for (const f of ["data/paper", "data/paper.json", "data/results.json", "data/model.json"]) if (existsSync(f)) rmSync(f, { recursive: true });
+for (const f of ["data/paper", "data/paper.json", "data/results.json", "data/model.json", "data/latest.json"]) if (existsSync(f)) rmSync(f, { recursive: true });
 console.log("=== model ==="); await import("./model.mjs");
 console.log("=== paper ==="); await import("./paper.mjs");
-phase = "results"; NOW = new realDate(NOW.getTime() + 3 * 864e5); console.log("=== results ==="); await import("./results.mjs");
+phase = "results"; NOW = new realDate(NOW.getTime() + 3 * 864e5);
+process.env.SIM_SLOW_CSV = "1"; console.log("=== results (CSV pas encore à jour) ==="); await import("./results.mjs?slow");
+delete process.env.SIM_SLOW_CSV; console.log("=== results (CSV arrivé) ==="); await import("./results.mjs?full");
 const paper = JSON.parse((await import("node:fs")).readFileSync("data/paper.json", "utf8"));
 console.log("profils :", Object.values(paper.profiles).map(p => `${p.name} ${p.won}/${p.settled} roi ${p.roi == null ? "-" : (p.roi * 100).toFixed(0) + "%"} clv ${p.clv_avg == null ? "-" : (p.clv_avg * 100).toFixed(1) + "%"}`).join(" | "));
 console.log("clv global :", paper.clv, "logloss :", paper.logloss, "marchés :", Object.keys(paper.byMarket));
