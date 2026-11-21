@@ -101,7 +101,8 @@ for (const name of Object.keys(Engine.PRESETS)) {
   series[name] = [];
   for (const d of days) for (const t of (d.tickets[name] || [])) {
     P.n++; const legs = t.legs.map(id => d.selections.find(s => s.id === id)).filter(Boolean);
-    if (legs.length !== t.legs.length || legs.some(l => !l.result)) continue;
+    if (legs.length !== t.legs.length) continue;
+    if (legs.some(l => !l.result) && !legs.some(l => l.result === "lose")) continue;   // un pari perdu suffit à régler le ticket
     P.settled++; P.staked += t.stake;
     const lost = legs.some(l => l.result === "lose");
     const odds = legs.reduce((a, l) => a * (l.result === "push" ? 1 : l.price), 1);
@@ -111,7 +112,7 @@ for (const name of Object.keys(Engine.PRESETS)) {
     const clvs = legs.map(l => l.clv).filter(x => x != null); if (clvs.length) P.clv.push(clvs.reduce((a, b) => a + b, 0) / clvs.length);
     series[name].push({ date: d.date, profit: +profit.toFixed(2) });
     recent.push({ profile: name, date: d.date, odds: +odds.toFixed(2), prob: t.prob, stake: t.stake, profit: +profit.toFixed(2), won: !lost && odds > 1, linked: t.linked,
-      legs: legs.map(l => ({ match: `${l.home} - ${l.away}`, pick: l.pick, price: l.price, prob: l.prob, result: l.result, score: `${days.find(x => x.date === d.date).events.find(e => e.id === l.match_id)?.result?.hg}-${days.find(x => x.date === d.date).events.find(e => e.id === l.match_id)?.result?.ag}`, clv: l.clv })) });
+      legs: legs.map(l => ({ match: `${l.home} - ${l.away}`, pick: l.pick, price: l.price, prob: l.prob, result: l.result || "pending", score: (() => { const res = days.find(x => x.date === d.date).events.find(e => e.id === l.match_id)?.result; return res ? `${res.hg}-${res.ag}` : "à jouer"; })(), clv: l.clv })) });
   }
   let cum = 0; series[name] = series[name].map(p => ({ date: p.date, cum: +(cum += p.profit).toFixed(2) }));
   profiles[name] = { ...P, roi: P.staked ? P.profit / P.staked : null, clv_avg: P.clv.length ? P.clv.reduce((a, b) => a + b, 0) / P.clv.length : null, clv: undefined, profit: +P.profit.toFixed(2), staked: +P.staked.toFixed(2) };
