@@ -1,7 +1,10 @@
 name: Test papier (relevé quotidien)
 on:
-  schedule:
-    - cron: "25 7 * * *"   # tous les jours à 07:25 UTC (8h25 / 9h25 à Paris)
+  schedule:                # GitHub retarde souvent les lancements de plusieurs heures :
+    - cron: "7 5 * * *"    # plusieurs créneaux, le premier qui part fait le relevé,
+    - cron: "37 6 * * *"   # les suivants ne dépensent rien (cotes déjà fraîches)
+    - cron: "13 8 * * *"
+    - cron: "47 10 * * *"
   workflow_dispatch:
   push:
     paths: ["scripts/paper.mjs"]

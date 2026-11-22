@@ -1,7 +1,9 @@
 name: Résultats et valeur à la clôture
 on:
-  schedule:
-    - cron: "40 2 * * *"   # chaque nuit à 02:40 UTC
+  schedule:                # plusieurs créneaux (GitHub retarde souvent les lancements)
+    - cron: "11 1 * * *"
+    - cron: "43 3 * * *"
+    - cron: "19 6 * * *"
   workflow_dispatch:
   push:
     paths: ["scripts/results.mjs", "scripts/lib.mjs"]
