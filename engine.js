@@ -8,7 +8,11 @@
 
 const BOOKS=[["betclic_fr","Betclic"],["winamax_fr","Winamax"],["unibet_fr","Unibet"],["parionssport_fr","Parions Sport"],["pmu_fr","PMU"],["netbet_fr","NetBet"]];
 /* [clé Odds API, nom, code football-data.org, code football-data.co.uk] */
-const LEAGUES=[["soccer_france_ligue_one","Ligue 1","FL1","F1"],["soccer_france_ligue_two","Ligue 2",null,"F2"],["soccer_epl","Premier League","PL","E0"],["soccer_spain_la_liga","Liga","PD","SP1"],["soccer_italy_serie_a","Serie A","SA","I1"],["soccer_germany_bundesliga","Bundesliga","BL1","D1"],["soccer_uefa_champs_league","Ligue des champions","CL",null],["soccer_uefa_europa_league","Ligue Europa",null,null],["soccer_portugal_primeira_liga","Portugal","PPL","P1"],["soccer_netherlands_eredivisie","Eredivisie","DED","N1"]];
+/* [clé Odds API, nom, code football-data.org, code football-data.co.uk, sport] */
+const LEAGUES=[["soccer_france_ligue_one","Ligue 1","FL1","F1","foot"],["soccer_france_ligue_two","Ligue 2",null,"F2","foot"],["soccer_epl","Premier League","PL","E0","foot"],["soccer_spain_la_liga","Liga","PD","SP1","foot"],["soccer_italy_serie_a","Serie A","SA","I1","foot"],["soccer_germany_bundesliga","Bundesliga","BL1","D1","foot"],["soccer_uefa_champs_league","Ligue des champions","CL",null,"foot"],["soccer_uefa_europa_league","Ligue Europa",null,null,"foot"],["soccer_portugal_primeira_liga","Portugal","PPL","P1","foot"],["soccer_netherlands_eredivisie","Eredivisie","DED","N1","foot"],
+  ["basketball_nba","NBA",null,null,"basket"]];
+const SPORTS={foot:"Foot",basket:"Basket"};
+const sportOf=sk=>(LEAGUES.find(l=>l[0]===sk)||[])[4]||(String(sk).startsWith("basketball")?"basket":"foot");
 /* Profils réglés « en pro » : pour une même cote, moins de paris = moins de marge
    payée ; plus le ticket est risqué, plus la mise est petite. Tout est appliqué d'un
    coup (téléphone ET robot du test papier). */
@@ -68,6 +72,12 @@ function marketBooks(ev,mkey,point){
   return books;
 }
 function fairFromSharp(ev){
+  if(sportOf(ev.sport_key)!=="foot"){         /* sports sans nul : 2 issues (prolongation incluse) */
+    const h2h=marketBooks(ev,"h2h"),sh=SHARP.find(k=>k in h2h&&h2h[k][ev.home_team]&&h2h[k][ev.away_team]);let pH,pA,ref;
+    if(sh){[pH,pA]=devig([h2h[sh][ev.home_team],h2h[sh][ev.away_team]]);ref=sh;}
+    else{const all=Object.values(h2h).filter(b=>ev.home_team in b&&ev.away_team in b);if(all.length<3)return null;const ps=all.map(b=>devig([b[ev.home_team],b[ev.away_team]]));pH=ps.reduce((a,p)=>a+p[0],0)/ps.length;pA=1-pH;ref="consensus";}
+    return {pH,pD:0,pA,pO:null,ref,twoWay:true};
+  }
   const h2h=marketBooks(ev,"h2h"),tot=marketBooks(ev,"totals",2.5);
   const pick=bk=>SHARP.find(k=>k in bk);
   let pH,pD,pA,pO=null,ref;
@@ -92,6 +102,7 @@ function modelProbs(ev,model){
 /* ajustement complet d'un match : marché (+ mélange modèle si poids > 0) */
 function fitEvent(ev,opts={}){
   const f=fairFromSharp(ev);if(!f)return null;
+  if(f.twoWay)return {twoWay:true,pH:f.pH,pA:f.pA,err:0,fair:f,market:f,model:null,weight:0,disagree:0};
   let fair={...f},mp=null,w=0;
   if(opts.model&&(opts.weight||0)>0){mp=modelProbs(ev,opts.model);
     if(mp){w=opts.weight;const mix=(a,b)=>a==null?b:b==null?a:(1-w)*a+w*b;fair={pH:mix(f.pH,mp.pH),pD:mix(f.pD,mp.pD),pA:mix(f.pA,mp.pA),pO:mix(f.pO,mp.pO),ref:f.ref};}}
@@ -109,11 +120,14 @@ function bestPrice(books,name,myBooks){
 function mkSel(ev,fit,mkey,side,point,team,label,bp,extra){
   const sel={id:`${ev.id}|${mkey}|${side}|${point??''}|${team??''}`,match_id:ev.id,sport_key:ev.sport_key,match:`${ev.home_team} - ${ev.away_team}`,home:ev.home_team,away:ev.away_team,
     league:ev.sport_title||"",kickoff:ev.commence_time,mkey,side,point:point??null,team:team??null,pick:label,price:bp.price,book:bp.book,extra:!!extra};
-  sel.prob=Model.prob(fit,sel);sel.edge=sel.price*sel.prob-1;return sel;
+  sel.sport=sportOf(ev.sport_key);
+  if(fit.twoWay){sel.twoWay=true;sel.prob=side==='H'?fit.pH:fit.pA;}else sel.prob=Model.prob(fit,sel);
+  sel.edge=sel.price*sel.prob-1;return sel;
 }
 function selectionsFor(ev,fit,cfg,extras){
   if(!fit||fit.err>2e-3)return [];
   const out=[],H=ev.home_team,A=ev.away_team,my=cfg.mes_bookmakers||[];
+  if(fit.twoWay){const b=marketBooks(ev,"h2h");for(const [name,side] of [[H,'H'],[A,'A']]){const bp=bestPrice(b,name,my);if(bp)out.push(mkSel(ev,fit,"h2h",side,null,null,name,bp));}return out;}
   if(cfg.marches["1N2"]){const b=marketBooks(ev,"h2h");for(const [name,side,label] of [[H,'H',H],["Draw",'D',"Nul"],[A,'A',A]]){const bp=bestPrice(b,name,my);if(bp)out.push(mkSel(ev,fit,"h2h",side,null,null,label,bp));}}
   if(cfg.marches.plus_moins_2_5){const b=marketBooks(ev,"totals",2.5);for(const [name,side,label] of [["Over",'O',"+2,5 buts"],["Under",'U',"-2,5 buts"]]){const bp=bestPrice(b,name,my);if(bp)out.push(mkSel(ev,fit,"totals",side,2.5,null,label,bp));}}
   if(cfg.marches.les_deux_marquent){const b=marketBooks(ev,"btts");for(const [name,side,label] of [["Yes",'Y',"Les deux marquent"],["No",'N',"Pas les deux"]]){const bp=bestPrice(b,name,my);if(bp)out.push(mkSel(ev,fit,"btts",side,null,null,label,bp));}}
@@ -149,6 +163,7 @@ function ticketProb(legs,fitById){
   for(const [mid,ls] of Object.entries(byM)){
     const pi=prod(ls.map(l=>l.prob));indep*=pi;
     if(ls.length===1){p*=pi;continue;}
+    if(fitById[mid].twoWay)return null;
     const j=Model.joint(fitById[mid],ls);
     if(j>0.98*Math.min(...ls.map(l=>l.prob)))return null;   // redondant
     linked=true;p*=j;
@@ -168,11 +183,11 @@ function buildTickets(sel,fitById,cfg){
     const t=target**(1/n);
     const ranked=[...cand].sort((a,b)=>sc(b)*Math.exp(-1.5*Math.abs(Math.log(b.price/t)))-sc(a)*Math.exp(-1.5*Math.abs(Math.log(a.price/t))));
     const cnt={};let k=0;
-    for(const s of ranked){if(k>=Math.ceil(42/(cfg.matchs_max_par_combi-cfg.matchs_min_par_combi+1))+6)break;if((cnt[s.match_id]||0)>=perMatch)continue;cnt[s.match_id]=(cnt[s.match_id]||0)+1;picked.set(s.id,s);k++;}
+    for(const s of ranked){if(k>=Math.ceil(42/(cfg.matchs_max_par_combi-cfg.matchs_min_par_combi+1))+6)break;if((cnt[s.match_id]||0)>=(s.twoWay?1:perMatch))continue;cnt[s.match_id]=(cnt[s.match_id]||0)+1;picked.set(s.id,s);k++;}
   }
   /* + l'ancienne présélection telle quelle (les 42 meilleurs paris), pour ne rien perdre */
   const byM={};for(const s of [...cand].sort((a,b)=>sc(b)-sc(a)))(byM[s.match_id]=byM[s.match_id]||[]).push(s);
-  for(const s of Object.values(byM).flatMap(ls=>ls.slice(0,perMatch)).sort((a,b)=>sc(b)-sc(a)).slice(0,42))picked.set(s.id,s);
+  for(const s of Object.values(byM).flatMap(ls=>ls.slice(0,ls[0]&&ls[0].twoWay?1:perMatch)).sort((a,b)=>sc(b)-sc(a)).slice(0,42))picked.set(s.id,s);
   const pool=[...picked.values()].sort((a,b)=>sc(b)-sc(a)).slice(0,64);
   const out=[];let count=0;
   for(let n=cfg.matchs_min_par_combi;n<=cfg.matchs_max_par_combi;n++)for(const legs of combinations(pool,n)){
@@ -194,5 +209,12 @@ function analyse(events,cfg,opts={}){
   return {fitById,selections:sel,tickets:buildTickets(sel,fitById,cfg)};
 }
 
-return {BOOKS,LEAGUES,PRESETS,PKEYS,samePreset,DEFAULTS,SHARP,prod,norm,devig,canon,sim,findTeam,marketBooks,fairFromSharp,modelProbs,fitEvent,selectionsFor,buildTickets,ticketProb,scoreOf,analyse};
+/* un calcul par sport : jamais de ticket qui mélange foot et basket */
+function analyseBySport(events,cfg,opts={}){
+  const groups={};for(const e of events)(groups[sportOf(e.sport_key)]=groups[sportOf(e.sport_key)]||[]).push(e);
+  const out={};for(const [sp,evs] of Object.entries(groups)){const a=analyse(evs,cfg,opts);a.tickets.forEach(t=>t.sport=sp);out[sp]=a;}
+  return out;
+}
+
+return {SPORTS,sportOf,analyseBySport,BOOKS,LEAGUES,PRESETS,PKEYS,samePreset,DEFAULTS,SHARP,prod,norm,devig,canon,sim,findTeam,marketBooks,fairFromSharp,modelProbs,fitEvent,selectionsFor,buildTickets,ticketProb,scoreOf,analyse};
 });

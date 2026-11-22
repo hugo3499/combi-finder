@@ -1,6 +1,7 @@
 # Combi Finder
 
-Application de combinés (2 à 4 paris) qui tourne entièrement dans le téléphone :
+Application de combinés (2 à 4 paris), foot et basket (NBA), qui tourne entièrement dans le téléphone.
+Un ticket est toujours 100 % foot ou 100 % basket :
 `https://hugo3499.github.io/combi-finder/` puis « Ajouter à l'écran d'accueil ».
 
 ## Clés et secrets

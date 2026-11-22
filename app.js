@@ -68,7 +68,7 @@ function context(ev,events,fit){
   const m=[];
   if(fit&&fit.model){const d=fit.disagree;m.push(`Modèle maison : ${ev.home_team} ${pct(fit.model.pH)} · nul ${pct(fit.model.pD)} · ${ev.away_team} ${pct(fit.model.pA)} (marché : ${pct(fit.market.pH)} · ${pct(fit.market.pD)} · ${pct(fit.market.pA)})${d>0.08?' — DÉSACCORD':''}`);}
   const warn=f.length>0||s.some(x=>/rien à jouer|éliminé/.test(x))||(fit&&fit.disagree>0.08);
-  return {lines:[...s,...f,...m],warn,disagree:fit?fit.disagree:0,link:`https://www.google.com/search?q=${encodeURIComponent('compo '+ev.home_team+' '+ev.away_team)}`};
+  return {lines:[...s,...f,...m],warn,disagree:fit?fit.disagree:0,link:`https://www.google.com/search?q=${encodeURIComponent((Engine.sportOf(ev.sport_key)==='foot'?'compo ':'absents blessés ')+ev.home_team+' '+ev.away_team)}`,linkLabel:Engine.sportOf(ev.sport_key)==='foot'?'compos':'absents'};
 }
 
 /* ============================================================ tickets */
@@ -76,14 +76,19 @@ function compute(c){
   const now=Date.now(),limit=now+cfg.jours_a_venir*864e5,leagues=new Set(cfg.championnats);
   const events=c.events.filter(e=>(c.demo||leagues.has(e.sport_key))&&Date.parse(e.commence_time)>now&&Date.parse(e.commence_time)<=limit);
   const w=c.demo?0:modelWeight();
-  const an=Engine.analyse(events,cfg,{extras:c.extras,model:w?modelData:null,weight:w});
+  const bySport=Engine.analyseBySport(events,cfg,{extras:c.extras,model:w?modelData:null,weight:w});
+  const order=Object.keys(Engine.SPORTS).filter(s=>bySport[s]);
+  const tickets=order.flatMap(s=>bySport[s].tickets);
+  const fitById=Object.assign({},...order.map(s=>bySport[s].fitById));
+  const an={tickets,fitById};
   const ctx={};for(const e of events)ctx[e.id]=context(e,c.events,an.fitById[e.id]);
   const p=c.params||{};
   const missing=c.demo?[]:[...leagues].filter(l=>!(p.championnats||[]).includes(l));
   const staleM=!c.demo&&["1N2","plus_moins_2_5","les_deux_marquent"].some(m=>cfg.marches[m]&&!(p.marches||{})[m]);
+  const sports=order;
   const staleB=!c.demo&&cfg.mes_bookmakers.some(b=>!(p.mes_bookmakers||[]).includes(b));
   const nExtra=events.filter(e=>c.extras&&c.extras[e.id]).length;
-  return {tickets:an.tickets,fitById:an.fitById,events,ctx,matches:events.length,demo:!!c.demo,fetched_at:c.fetched_at,remaining:c.remaining,logs:c.logs||[],missing,needs_refresh:!!(missing.length||staleM||staleB),nExtra,
+  return {tickets:an.tickets,fitById:an.fitById,sports,events,ctx,matches:events.length,demo:!!c.demo,fetched_at:c.fetched_at,remaining:c.remaining,logs:c.logs||[],missing,needs_refresh:!!(missing.length||staleM||staleB),nExtra,
     noExtra:cfg.marches.extras&&!c.demo&&nExtra===0,weight:w};
 }
 
@@ -100,8 +105,9 @@ async function fetchStage1(logs){
   const markets=[cfg.marches["1N2"]&&"h2h",cfg.marches.plus_moins_2_5&&"totals"].filter(Boolean).join(",")||"h2h";
   const events=[];let rem=null;
   for(const sp of cfg.championnats){
-    try{const [data,r]=await apiGet(`${API}/sports/${sp}/odds/?apiKey=${K()}&bookmakers=${booksParam()}&markets=${markets}&oddsFormat=decimal`);if(r!=null)rem=r;
-      if(cfg.marches.les_deux_marquent)for(const e of data){try{const [x,r2]=await apiGet(`${API}/sports/${sp}/events/${e.id}/odds?apiKey=${K()}&bookmakers=${booksParam()}&markets=btts&oddsFormat=decimal`);if(r2!=null)rem=r2;
+    const foot=Engine.sportOf(sp)==="foot";
+    try{const [data,r]=await apiGet(`${API}/sports/${sp}/odds/?apiKey=${K()}&bookmakers=${booksParam()}&markets=${foot?markets:"h2h"}&oddsFormat=decimal`);if(r!=null)rem=r;
+      if(foot&&cfg.marches.les_deux_marquent)for(const e of data){try{const [x,r2]=await apiGet(`${API}/sports/${sp}/events/${e.id}/odds?apiKey=${K()}&bookmakers=${booksParam()}&markets=btts&oddsFormat=decimal`);if(r2!=null)rem=r2;
           const byk=Object.fromEntries(e.bookmakers.map(b=>[b.key,b]));for(const b of x.bookmakers||[]){if(byk[b.key])byk[b.key].markets.push(...b.markets);else e.bookmakers.push(b);}}catch(err){logs.push(`[!] BTTS ${e.home_team} : ${err.message}`);}}
       events.push(...data);logs.push(`[ok] ${leagueName(sp)} : ${data.length} matchs`);
     }catch(err){logs.push(`[!] ${leagueName(sp)} : ${err.message}`);if(/Clé API/.test(err.message))throw err;}
@@ -241,7 +247,7 @@ const chips=(el,list,isOn,toggle)=>{el.innerHTML=list.map(([k,l])=>`<button clas
 const seg=(el,get,set)=>{const paint=()=>el.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v)===String(get())));el.onclick=e=>{const b=e.target.closest('button');if(!b)return;set(b.dataset.v);paint();changed();};paint();return paint;};
 const toggleIn=(arr,k)=>arr.includes(k)?arr.filter(x=>x!==k):[...arr,k];
 const currentPreset=()=>Object.keys(PRESETS).find(p=>Engine.samePreset(cfg,PRESETS[p]))||'';
-function cost(){const nm=(cfg.marches["1N2"]?1:0)+(cfg.marches.plus_moins_2_5?1:0)||1;return cfg.championnats.length*nm+(cfg.marches.extras?cfg.preselection*4:0);}
+function cost(){const nm=(cfg.marches["1N2"]?1:0)+(cfg.marches.plus_moins_2_5?1:0)||1;const foot=cfg.championnats.filter(l=>Engine.sportOf(l)==="foot").length,other=cfg.championnats.length-foot;return foot*nm+other+(cfg.marches.extras&&foot?cfg.preselection*4:0);}
 function labels(){
   const n=cost();$('runCost').textContent=`(≈ ${n} crédits${cfg.marches.les_deux_marquent?' + 1/match':''})`;
   $('cost').textContent="Changer les filtres est gratuit : seul « Actualiser les cotes » consomme des crédits.";
@@ -261,6 +267,7 @@ function bind(){
   $('preset').onclick=e=>{const b=e.target.closest('button');if(!b)return;const p=PRESETS[b.dataset.v];PKEYS.forEach(k=>cfg[k]=p[k]);bind();changed();};
   chips($('books'),BOOKS,k=>cfg.mes_bookmakers.includes(k),k=>cfg.mes_bookmakers=toggleIn(cfg.mes_bookmakers,k));
   chips($('leagues'),LEAGUES,k=>cfg.championnats.includes(k),k=>cfg.championnats=toggleIn(cfg.championnats,k));
+  {let prev=null;$('leagues').querySelectorAll('.chip').forEach(b=>{const sp=Engine.sportOf(b.dataset.k);if(sp!==prev){const t=document.createElement('span');t.className='chip-group';t.textContent=Engine.SPORTS[sp];b.before(t);prev=sp;}});}
   chips($('markets'),MARKETS,k=>!!cfg.marches[k],k=>cfg.marches[k]=!cfg.marches[k]);
   let pMax,pMin;
   pMin=seg($('legsMin'),()=>cfg.matchs_min_par_combi,v=>{cfg.matchs_min_par_combi=+v;if(cfg.matchs_max_par_combi<+v){cfg.matchs_max_par_combi=+v;pMax&&pMax();}});
@@ -290,13 +297,15 @@ function show(c){
   note.innerHTML=warn.length?`<div class="note">${warn.join(' ')}${warn.some(w=>/Actualiser|ajouté|Pas encore|plus de 6/.test(w))?' Appuie sur <b>Actualiser les cotes</b> pour mettre à jour.':''}</div>`:'';
   $('logs').textContent=res.logs.join('\n');$('logsBox').hidden=!res.logs.length;
   if(!res.tickets.length){box.innerHTML=`<div class="empty">${res.matches?`Aucun ticket ne passe tes filtres sur ${res.matches} matchs.<br>Essaie un autre profil de risque ou baisse la chance mini par pari.`:`Aucun match à venir sur la période.<br>Augmente le nombre de jours (trêve internationale ?) ou actualise les cotes.`}</div>`;return;}
+  let shownSport=null;const multi=res.sports.length>1;
   box.innerHTML=res.tickets.map((t,i)=>{
+    const head=multi&&t.sport!==shownSport?(shownSport=t.sport,`<h3 class="sport-h">${Engine.SPORTS[t.sport]}</h3>`):'';
     const mids=[...new Set(t.legs.map(l=>l.match_id))];
     const ctxHtml=mids.map(mid=>{const cx=res.ctx[mid],ev=res.events.find(e=>e.id===mid);const ok=!!checked[mid];
       return `<div class="cx ${cx.warn?'cx-warn':''}">${cx.lines.length?cx.lines.map(l=>`<div>${esc(l)}</div>`).join(''):`<div>${esc(ev.home_team)} - ${esc(ev.away_team)} : pas de signal particulier</div>`}
-        <div class="cx-acts"><a href="${cx.link}" target="_blank" rel="noopener">Vérifier les compos ↗</a><label><input type="checkbox" data-chk="${mid}" ${ok?'checked':''}> compos vérifiées</label></div></div>`;}).join('');
-    return `<article class="t" style="animation-delay:${Math.min(i,8)*40}ms">
-    <div class="t-top"><div><div class="t-rank">Ticket #${i+1} · ${t.legs.length} paris${t.linked?` · <span class="tag">paris liés ${t.boost>0?'+':''}${Math.round(t.boost*100)} %</span>`:''}${t.ev>0?` · <span class="tag tag-val">valeur +${(t.ev*100).toFixed(0)} %</span>`:''}</div><div class="t-odds num"><small>cote</small>${t.odds.toFixed(2)}</div></div>
+        <div class="cx-acts"><a href="${cx.link}" target="_blank" rel="noopener">Vérifier les ${cx.linkLabel} ↗</a><label><input type="checkbox" data-chk="${mid}" ${ok?'checked':''}> ${cx.linkLabel} vérifiés</label></div></div>`;}).join('');
+    return `${head}<article class="t" style="animation-delay:${Math.min(i,8)*40}ms">
+    <div class="t-top"><div><div class="t-rank">${Engine.SPORTS[t.sport]} · Ticket #${i+1} · ${t.legs.length} paris${t.linked?` · <span class="tag">paris liés ${t.boost>0?'+':''}${Math.round(t.boost*100)} %</span>`:''}${t.ev>0?` · <span class="tag tag-val">valeur +${(t.ev*100).toFixed(0)} %</span>`:''}</div><div class="t-odds num"><small>cote</small>${t.odds.toFixed(2)}</div></div>
      <div class="t-prob"><div class="num">${pct(t.prob)}</div><div>de chances</div></div></div>
     <div class="meter"><i style="width:${Math.min(100,t.prob*100)}%"></i></div>
     <ul class="legs">${t.legs.map(l=>`<li><span class="lm">${esc(l.match)} · ${when(l.kickoff)}</span><span class="lp">${esc(l.pick)}</span><span class="lo"><span class="num">${l.price.toFixed(2)}</span><span>${bookName(l.book)} · ${pct(l.prob)}${l.edge>0.02?' · <b>+'+Math.round(l.edge*100)+' %</b>':''}</span></span></li>`).join('')}</ul>
@@ -325,9 +334,10 @@ function renderTest(){
   const P=paperData,box=$('test');
   if(!P){box.innerHTML=`<div class="empty">Le test papier n’a pas encore tourné.<br>Il démarre dès que les clés sont dans les secrets GitHub (voir README).</div>`;return;}
   const st={prudent:"Prudent",equilibre:"Équilibré",risque:"Risqué",gros:"Gros coup"};
-  const prof=Object.values(P.profiles||{});
-  const maxAbs=Math.max(1,...prof.flatMap(p=>(P.series[p.name]||[]).map(x=>Math.abs(x.cum))));
-  const spark=name=>{const s=P.series[name]||[];if(s.length<2)return '';const W=300,H=60;const pts=s.map((x,i)=>`${(i/(s.length-1)*W).toFixed(1)},${(H/2-x.cum/maxAbs*(H/2-4)).toFixed(1)}`).join(' ');return `<svg viewBox="0 0 ${W} ${H}" class="spark"><line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}"/><polyline points="${pts}"/></svg>`;};
+  const prof=Object.values(P.profiles||{}).map(p=>({...p,sport:p.sport||'foot'}));
+  const bySp=Object.keys(Engine.SPORTS).map(sp=>[sp,prof.filter(p=>p.sport===sp)]).filter(([,ps])=>ps.length);
+  const maxAbs=Math.max(1,...prof.flatMap(p=>(P.series[p.key||p.name]||[]).map(x=>Math.abs(x.cum))));
+  const spark=key=>{const s=P.series[key]||[];if(s.length<2)return '';const W=300,H=60;const pts=s.map((x,i)=>`${(i/(s.length-1)*W).toFixed(1)},${(H/2-x.cum/maxAbs*(H/2-4)).toFixed(1)}`).join(' ');return `<svg viewBox="0 0 ${W} ${H}" class="spark"><line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}"/><polyline points="${pts}"/></svg>`;};
   box.innerHTML=`
    <p class="status">Depuis le ${P.first_day?dateFr(P.first_day):'—'} · ${P.days} journées · ${P.events} matchs · ${P.settled} paris réglés · mis à jour ${ago(P.updated)}</p>
    <div class="stats">
@@ -335,16 +345,16 @@ function renderTest(){
     <div class="kpi"><b class="num">${P.clv.positive==null?'—':pct(P.clv.positive)}</b><span>paris qui battent la clôture</span></div>
     <div class="kpi"><b class="num">${P.logloss.market==null?'—':P.logloss.market.toFixed(3)}</b><span>log-loss marché${P.logloss.blend!=null&&P.weight_used?` · mélange ${P.logloss.blend.toFixed(3)}`:''}</span></div>
    </div>
-   <p class="lab">Bilan par profil (bankroll fictive 100 €, mise 2 € par ticket, 5 tickets par journée)</p>
-   <div class="tickets">${prof.map(p=>`<article class="t"><div class="t-top"><div><div class="t-rank">${st[p.name]||p.name} · ${p.label}</div><div class="t-odds num ${p.profit>0?'up':p.profit<0?'down':''}">${p.settled?(p.profit>=0?'+':'')+eur(p.profit):'—'}</div></div>
-     <div class="t-prob"><div class="num">${p.roi==null?'—':spct(p.roi,0)}</div><div>ROI · ${p.won}/${p.settled} gagnés</div></div></div>${spark(p.name)}
-     <ul class="legs"><li><span class="lm">Valeur à la clôture moyenne</span><span class="lp">${p.clv_avg==null?'—':spct(p.clv_avg)}</span></li><li><span class="lm">Tickets avec paris liés</span><span class="lp">${p.linked}</span></li></ul></article>`).join('')}</div>
+   ${bySp.map(([sp,ps])=>`<h3 class="sport-h">${Engine.SPORTS[sp]||sp}</h3><p class="lab">Bilan par profil (bankroll fictive 100 €, mise selon le profil, 5 tickets par journée)</p>
+   <div class="tickets">${ps.map(p=>`<article class="t"><div class="t-top"><div><div class="t-rank">${st[p.name]||p.name} · ${p.label}</div><div class="t-odds num ${p.profit>0?'up':p.profit<0?'down':''}">${p.settled?(p.profit>=0?'+':'')+eur(p.profit):'—'}</div></div>
+     <div class="t-prob"><div class="num">${p.roi==null?'—':spct(p.roi,0)}</div><div>ROI · ${p.won}/${p.settled} gagnés</div></div></div>${spark(p.key||p.name)}
+     <ul class="legs"><li><span class="lm">Valeur à la clôture moyenne</span><span class="lp">${p.clv_avg==null?'—':spct(p.clv_avg)}</span></li><li><span class="lm">Tickets avec paris liés</span><span class="lp">${p.linked}</span></li></ul></article>`).join('')}</div>`).join('')}
    <div class="panel" style="margin-top:16px"><p class="lab">Calibration des probabilités (${P.settled} paris)</p>
     ${(P.calib.blend||[]).filter(b=>b.n>=5).map(b=>`<div class="cal"><span>${Math.round(b.lo*100)}–${Math.round(Math.min(b.hi,1)*100)} %</span><div class="bar"><i style="width:${b.hit*100}%"></i><em style="left:${b.pred*100}%"></em></div><span>${Math.round(b.hit*100)} % réel · ${b.n}</span></div>`).join('')||'<p class="hint">Pas encore assez de paris réglés.</p>'}
     <p class="hint">Barre = taux réel, trait = taux prédit. Si la barre est plus courte que le trait, l’appli est trop optimiste sur cette tranche.</p></div>
    <div class="panel" style="margin-top:16px"><p class="lab">Par type de pari</p>
     ${Object.entries(P.byMarket||{}).map(([k,m])=>`<div class="cal"><span>${esc(k)}</span><div class="bar"><i style="width:${m.hit*100}%"></i><em style="left:${m.pred*100}%"></em></div><span>${Math.round(m.hit*100)} % · ${m.n} · ROI ${spct(m.roi)}</span></div>`).join('')||'<p class="hint">—</p>'}</div>
-   <details class="panel" style="margin-top:16px"><summary>Derniers tickets réglés</summary>${(P.recent||[]).map(t=>`<article class="t b-${t.won?'won':'lost'}" style="margin-top:10px"><div class="t-top"><div><div class="t-rank">${st[t.profile]||t.profile} · ${dateFr(t.date)}${t.linked?' · <span class="tag">liés</span>':''}</div><div class="t-odds num"><small>cote</small>${t.odds.toFixed(2)}</div></div><div class="t-prob"><div class="num ${t.profit>=0?'up':'down'}">${(t.profit>=0?'+':'')+eur(t.profit)}</div><div>${pct(t.prob)} prévu</div></div></div>
+   <details class="panel" style="margin-top:16px"><summary>Derniers tickets réglés</summary>${(P.recent||[]).map(t=>`<article class="t b-${t.won?'won':'lost'}" style="margin-top:10px"><div class="t-top"><div><div class="t-rank">${Engine.SPORTS[t.sport||'foot']} · ${st[t.profile]||t.profile} · ${dateFr(t.date)}${t.linked?' · <span class="tag">liés</span>':''}</div><div class="t-odds num"><small>cote</small>${t.odds.toFixed(2)}</div></div><div class="t-prob"><div class="num ${t.profit>=0?'up':'down'}">${(t.profit>=0?'+':'')+eur(t.profit)}</div><div>${pct(t.prob)} prévu</div></div></div>
      <ul class="legs">${t.legs.map(l=>`<li class="r-${l.result}"><span class="lm">${esc(l.match)} · ${l.score}</span><span class="lp">${esc(l.pick)}</span><span class="lo"><span class="num">${l.price.toFixed(2)}</span><span>${pct(l.prob)}${l.clv!=null?' · CLV '+spct(l.clv):''}</span></span></li>`).join('')}</ul></article>`).join('')||'<p class="hint">Aucun pour l’instant.</p>'}</details>
    ${modelData?`<div class="panel" style="margin-top:16px"><p class="lab">Modèle maison (backtest ${modelData.backtest.n} matchs)</p><p class="hint">${esc(modelData.verdict)}</p><p class="hint">Log-loss 1N2 : marché ${modelData.backtest.ll['0']} · modèle seul ${modelData.backtest.ll.model_only} · ${Object.entries(modelData.backtest.ll).filter(([k])=>!isNaN(k)&&+k>0).map(([k,v])=>`mélange ${Math.round(k*100)} % → ${v}`).join(' · ')}. Plus bas = mieux.</p></div>`:''}`;
 }
