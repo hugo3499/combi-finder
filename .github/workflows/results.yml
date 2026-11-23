@@ -6,7 +6,7 @@ on:
     - cron: "19 6 * * *"
   workflow_dispatch:
   push:
-    paths: ["scripts/results.mjs", "scripts/lib.mjs"]
+    paths: ["scripts/results.mjs", "scripts/lib.mjs", "engine.js"]
 permissions:
   contents: write
 concurrency: { group: data, cancel-in-progress: false }
