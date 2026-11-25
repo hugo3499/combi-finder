@@ -135,9 +135,9 @@ async function fetchAll(){
   return c;
 }
 async function quota(){if(!cfg.cle_api)return null;const [,rem]=await apiGet(`${API}/sports/?apiKey=${K()}`);return rem;}
-async function loadFile(name){
-  try{const r=await fetch(`./data/${name}.json?t=${Math.floor(Date.now()/36e5)}`);if(r.ok){const d=await r.json();store.set("f_"+name,d);return d;}}catch(e){}
-  return store.get("f_"+name,null);
+async function loadFile(name,keep=true){
+  try{const r=await fetch(`./data/${name}.json?t=${Math.floor(Date.now()/36e5)}`);if(r.ok){const d=await r.json();if(keep)store.set("f_"+name,d);return d;}}catch(e){}
+  return keep?store.get("f_"+name,null):null;
 }
 async function loadData(){
   let latest;
@@ -330,8 +330,66 @@ async function refresh(demo){
 }
 function loadQuota(){quota().then(setQuota).catch(()=>{});}
 function setTab(t){tab=t;document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===t));$('viewTickets').hidden=t!=="tickets";$('settings').style.display=t==="tickets"?"":"none";$('viewBets').hidden=t!=="bets";$('viewTest').hidden=t!=="test";if(t==="bets")renderBets();if(t==="test")renderTest();}
+
+/* ============================================================ historique du robot */
+let testView="bilan",histDays=null,histFilter={profil:"",sport:"",statut:""},histLimit=10;
+const PROF_NAMES={prudent:"Prudent",equilibre:"Équilibré",risque:"Risqué",gros:"Gros coup"};
 function renderTest(){
-  const P=paperData,box=$('test');
+  $('test').innerHTML=`<div class="seg subtabs" id="testSeg"><button data-v="bilan">Bilan</button><button data-v="histo">Historique des paris</button></div><div id="testBody"></div>`;
+  const paint=()=>$('testSeg').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===testView));
+  $('testSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;testView=b.dataset.v;paint();testView==="bilan"?renderBilan():renderHisto();};
+  paint();testView==="bilan"?renderBilan():renderHisto();
+}
+async function loadHisto(){
+  const idx=await loadFile("paper/index");if(!idx||!idx.days)return [];
+  const days=[...idx.days].sort().reverse();
+  const out=await Promise.all(days.map(d=>loadFile("paper/"+d,false)));   // pas gardé dans le téléphone : trop volumineux à la longue
+  return out.filter(Boolean);
+}
+function ticketState(t,d){
+  const legs=t.legs.map(id=>d.selections.find(s=>s.id===id)).filter(Boolean);
+  const ev=id=>d.events.find(e=>e.id===id);
+  const lost=legs.some(l=>l.result==="lose"),done=legs.every(l=>l.result);
+  const odds=legs.reduce((a,l)=>a*(l.result==="push"?1:l.price),1);
+  const status=lost?"perdu":done?(odds>1?"gagné":"remboursé"):"en cours";
+  const profit=lost?-t.stake:done?t.stake*(odds-1):null;
+  return {legs,ev,status,profit,played:legs.filter(l=>l.result).length};
+}
+async function renderHisto(){
+  const box=$('testBody');
+  if(!histDays){box.innerHTML='<p class="status">Chargement de l’historique…</p>';histDays=await loadHisto();}
+  if(!histDays.length){box.innerHTML='<div class="empty">Pas encore de paris du robot.</div>';return;}
+  const f=histFilter;
+  const opt=(id,vals,cur)=>`<select id="${id}">${vals.map(([v,l])=>`<option value="${v}" ${v===cur?'selected':''}>${l}</option>`).join('')}</select>`;
+  let all=[];
+  for(const d of histDays)for(const [prof,ts] of Object.entries(d.tickets||{}))for(const t of ts){
+    const sp=t.sport||"foot";if(f.profil&&f.profil!==prof)continue;if(f.sport&&f.sport!==sp)continue;
+    const s=ticketState(t,d);if(f.statut&&f.statut!==s.status)continue;all.push({d,prof,t,sp,...s});}
+  const tot=all.filter(x=>x.profit!=null),bil=tot.reduce((a,x)=>a+x.profit,0),mis=tot.reduce((a,x)=>a+x.t.stake,0);
+  const byDay=[];for(const x of all){let g=byDay.find(y=>y.date===x.d.date);if(!g){g={date:x.d.date,items:[]};byDay.push(g);}g.items.push(x);}
+  const shown=byDay.slice(0,histLimit);
+  const icon={win:'✓',lose:'✗',push:'↺'};
+  box.innerHTML=`
+   <div class="filters">${opt('hProf',[["","Tous les profils"],...Object.entries(PROF_NAMES)],f.profil)}${opt('hSport',[["","Tous les sports"],...Object.entries(Engine.SPORTS)],f.sport)}${opt('hStat',[["","Tous"],["en cours","En cours"],["gagné","Gagnés"],["perdu","Perdus"]],f.statut)}</div>
+   <div class="stats"><div class="kpi"><b class="num">${all.length}</b><span>tickets</span></div><div class="kpi"><b class="num">${all.filter(x=>x.status==="gagné").length}/${tot.length}</b><span>gagnés sur réglés</span></div>
+    <div class="kpi"><b class="num ${bil>0?'up':bil<0?'down':''}">${bil>=0?'+':''}${eur(bil)}</b><span>bilan fictif${mis?` · ROI ${spct(bil/mis,0)}`:''}</span></div><div class="kpi"><b class="num">${all.filter(x=>x.status==="en cours").length}</b><span>en cours</span></div></div>
+   <p class="hint">Chaque ticket est enregistré dans le dépôt GitHub avant le premier match, à une date qu’on ne peut pas modifier après coup.</p>
+   ${shown.map(g=>{const pr=g.items.filter(x=>x.profit!=null).reduce((a,x)=>a+x.profit,0);
+     return `<h3 class="day-h">${new Date(g.date+'T12:00:00Z').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}<span>${g.items.length} tickets${g.items.some(x=>x.profit!=null)?` · ${pr>=0?'+':''}${eur(pr)}`:''}</span></h3>
+     <div class="tickets">${g.items.map(x=>`<article class="t st-${x.status.replace(' ','-')}">
+       <div class="t-top"><div><div class="t-rank">${Engine.SPORTS[x.sp]} · ${PROF_NAMES[x.prof]||x.prof}${x.t.linked?' · <span class="tag">liés</span>':''}</div><div class="t-odds num"><small>cote</small>${x.t.odds.toFixed(2)}</div></div>
+        <div class="t-prob"><div class="num ${x.status==='gagné'?'up':x.status==='perdu'?'down':''}">${x.status==='en cours'?pct(x.t.prob):(x.profit>=0?'+':'')+eur(x.profit)}</div><div><span class="badge b-${x.status.replace(' ','-')}">${x.status}</span>${x.status==='en cours'?` · ${x.played}/${x.legs.length} joués`:''}</div></div></div>
+       <ul class="legs">${x.legs.map(l=>{const e=x.ev(l.match_id),r=e&&e.result;return `<li class="r-${l.result||'none'}"><span class="lm">${esc(l.home)} - ${esc(l.away)} · ${r?`<b>${r.hg}-${r.ag}</b>`:when(l.kickoff)}</span><span class="lp">${l.result?icon[l.result]+' ':''}${esc(l.pick)}</span><span class="lo"><span class="num">${l.price.toFixed(2)}</span><span>${pct(l.prob)}${l.clv!=null?' · CLV '+spct(l.clv):''}</span></span></li>`;}).join('')}</ul>
+       <div class="t-foot"><span>Mise ${eur(x.t.stake)}${x.status==='en cours'?` → <b>${eur(x.t.stake*x.t.odds)}</b>`:''}</span></div></article>`).join('')}</div>`;}).join('')||'<div class="empty">Aucun ticket avec ces filtres.</div>'}
+   ${byDay.length>histLimit?`<div class="go"><button class="btn alt" id="hMore">Voir les jours précédents</button></div>`:''}`;
+  $('hProf').onchange=e=>{f.profil=e.target.value;histLimit=10;renderHisto();};
+  $('hSport').onchange=e=>{f.sport=e.target.value;histLimit=10;renderHisto();};
+  $('hStat').onchange=e=>{f.statut=e.target.value;histLimit=10;renderHisto();};
+  if($('hMore'))$('hMore').onclick=()=>{histLimit+=10;renderHisto();};
+}
+
+function renderBilan(){
+  const P=paperData,box=$('testBody');
   if(!P){box.innerHTML=`<div class="empty">Le test papier n’a pas encore tourné.<br>Il démarre dès que les clés sont dans les secrets GitHub (voir README).</div>`;return;}
   const st={prudent:"Prudent",equilibre:"Équilibré",risque:"Risqué",gros:"Gros coup"};
   const prof=Object.values(P.profiles||{}).map(p=>({...p,sport:p.sport||'foot'}));
